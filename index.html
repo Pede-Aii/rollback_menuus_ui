@@ -35,8 +35,8 @@
             </details>
 
             <ol class="list-decimal ml-5 space-y-1">
-                <li>Insira seu <strong>Personal Access Token (PAT)</strong> no campo correspondente abaixo.</li>
-                <li>Confirme os dados do repositório, o nome do pacote e clique em <strong>Buscar Tags do GHCR</strong>.</li>
+                <li>Insira seu <strong>Personal Access Token (PAT)</strong> no campo correspondente abaixo (a busca de tags será automática).</li>
+                <li>Confirme os dados do repositório e o nome do pacote.</li>
                 <li>Selecione a Tag desejada, escolha o ambiente e clique em <strong>Acionar Rollback</strong>.</li>
             </ol>
         </div>
@@ -47,7 +47,7 @@
                 
                 <div>
                     <label for="token" class="block text-sm font-medium text-gray-700">GitHub PAT (com <code class="bg-gray-200 px-1 rounded">repo</code> e <code class="bg-gray-200 px-1 rounded">read:packages</code>)</label>
-                    <input type="password" id="token" placeholder="ghp_..." required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
+                    <input type="password" id="token" placeholder="Cole seu token aqui (ghp_...)" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
 
                 <div>
@@ -59,10 +59,6 @@
                     <label for="packageName" class="block text-sm font-medium text-gray-700">Nome do Pacote (GHCR)</label>
                     <input type="text" id="packageName" value="pedeaiiapi" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
-
-                <button type="button" id="btnFetchTags" class="w-full bg-gray-800 text-white font-bold py-2 px-4 rounded hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition-colors">
-                    🔍 Buscar Tags do GHCR
-                </button>
             </div>
 
             <form id="rollbackForm" class="space-y-4 border p-4 rounded-md bg-gray-50 shadow-inner">
@@ -84,7 +80,7 @@
                 <div>
                     <label for="tag" class="block text-sm font-medium text-gray-700">Selecione a Imagem (Tag)</label>
                     <select id="tag" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
-                        <option value="" disabled selected>Busque as tags primeiro...</option>
+                        <option value="" disabled selected>Aguardando Token...</option>
                     </select>
                 </div>
 
@@ -111,18 +107,17 @@
             statusDiv.innerHTML = message;
         }
 
-        document.getElementById('btnFetchTags').addEventListener('click', async () => {
+        async function fetchTags() {
             const token = document.getElementById('token').value.trim();
             const repoValue = document.getElementById('repo').value.trim();
             const packageName = document.getElementById('packageName').value.trim();
             const owner = repoValue.split('/')[0];
 
             if (!token || !owner || !packageName) {
-                showStatus('⚠️ Preencha o Token, Repositório e Nome do Pacote.', 'error');
                 return;
             }
 
-            showStatus('⏳ Buscando imagens disponíveis no GHCR...', 'info');
+            showStatus('⏳ Validando token e buscando imagens disponíveis no GHCR...', 'info');
             tagSelect.innerHTML = '<option value="" disabled selected>Carregando...</option>';
             btnRollback.disabled = true;
 
@@ -137,14 +132,19 @@
                     });
                 }
 
-                if (!response.ok) throw new Error(`Erro da API: ${response.status}`);
+                if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error("Token inválido ou sem a permissão 'read:packages'.");
+                    }
+                    throw new Error(`Erro ${response.status} ao acessar os pacotes no GHCR.`);
+                }
 
                 const versions = await response.json();
                 tagSelect.innerHTML = '';
 
                 if (versions.length === 0) {
                     tagSelect.innerHTML = '<option value="" disabled selected>Nenhuma imagem encontrada</option>';
-                    showStatus('⚠️ Nenhuma versão de pacote encontrada.', 'error');
+                    showStatus('⚠️ Token válido, mas nenhuma versão do pacote foi encontrada.', 'error');
                     return;
                 }
 
@@ -160,10 +160,19 @@
                 });
 
                 btnRollback.disabled = false;
-                showStatus('✅ Imagens carregadas com sucesso! Selecione a tag desejada e clique em Acionar Rollback.', 'success');
+                showStatus('✅ Token validado e imagens carregadas! Selecione a tag desejada e clique em Acionar Rollback.', 'success');
             } catch (error) {
                 tagSelect.innerHTML = '<option value="" disabled selected>Erro ao carregar</option>';
-                showStatus(`❌ Erro ao buscar tags: ${error.message}. <br><span class="text-sm">Verifique se o token tem a permissão <strong>read:packages</strong> e se os dados estão corretos.</span>`, 'error');
+                showStatus(`❌ Ops! Falha ao carregar as tags.<br><span class="text-sm font-normal">Detalhe: ${error.message} <br>Verifique se o token foi copiado integralmente.</span>`, 'error');
+            }
+        }
+
+        let typingTimer;
+        document.getElementById('token').addEventListener('input', () => {
+            clearTimeout(typingTimer);
+            const token = document.getElementById('token').value.trim();
+            if (token.length >= 15) { 
+                typingTimer = setTimeout(fetchTags, 600);
             }
         });
 
