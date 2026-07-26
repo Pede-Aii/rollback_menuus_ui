@@ -150,12 +150,13 @@
 
                 versions.forEach(v => {
                     const tags = v.metadata?.container?.tags || [];
-                    const displayName = tags.length > 0 ? tags[0] : v.name;
+                    const displayTags = tags.length > 0 ? [...tags].reverse().join(', ') : v.name;
+                    const valueTag = tags.length > 0 ? tags[0] : v.name;
                     const date = new Date(v.created_at).toLocaleString('pt-BR');
                     
                     const option = document.createElement('option');
-                    option.value = displayName;
-                    option.textContent = `${displayName} - (${date})`;
+                    option.value = valueTag;
+                    option.textContent = `[${displayTags}] - (${date})`;
                     tagSelect.appendChild(option);
                 });
 
